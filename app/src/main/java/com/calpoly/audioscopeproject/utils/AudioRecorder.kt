@@ -33,6 +33,11 @@ class AudioRecorder(private val context: Context) {
             ENCODING_PCM_16BIT,
             BUFFER_SIZE
         ).apply { startRecording() }
+
+
+
+
+
     }
 
     fun stopRecording() {
