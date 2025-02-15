@@ -23,7 +23,6 @@ class AudioRecorder(private val context: Context) {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            // Handle missing permissions (request from activity)
             return
         }
 
