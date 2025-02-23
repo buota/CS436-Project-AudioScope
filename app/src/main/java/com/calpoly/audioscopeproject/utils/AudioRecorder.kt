@@ -7,43 +7,67 @@ import android.media.AudioFormat.*
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.core.app.ActivityCompat
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class AudioRecorder(private val context: Context) {
-    private var audioRecord: AudioRecord? = null
+class AudioProcessor(private val context: Context) {
+
+    private val sampleRate = 44100
+    private val bufferSize = 1024
     private var isRecording = false
-    private val SAMPLE_RATE = 44100
-    private val BUFFER_SIZE = AudioRecord.getMinBufferSize(
-        SAMPLE_RATE, CHANNEL_IN_MONO, ENCODING_PCM_16BIT
-    )
+    private var audioRecord: AudioRecord? = null
 
-    fun startRecording() {
-        if (isRecording) return
-        isRecording = true
-
+    suspend fun startContinuousRecording(onRawDataCaptured: suspend (ShortArray) -> Unit) {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            return
+            Log.e("AudioDebug", "Microphone permission not granted")
+            throw SecurityException("Microphone permission not granted")
         }
 
         audioRecord = AudioRecord(
             MediaRecorder.AudioSource.MIC,
-            SAMPLE_RATE,
+            sampleRate,
             CHANNEL_IN_MONO,
             ENCODING_PCM_16BIT,
-            BUFFER_SIZE
-        ).apply { startRecording() }
+            bufferSize * 2
+        )
 
+        if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e("AudioDebug", "AudioRecord failed to initialize")
+            return
+        }
 
+        val audioBuffer = ShortArray(bufferSize)
+        isRecording = true
+        audioRecord?.startRecording()
+        Log.d("AudioDebug", "Audio recording started")
 
-
-
+        try {
+            while (isRecording) {
+                val readSize = audioRecord?.read(audioBuffer, 0, bufferSize) ?: 0
+                if (readSize > 0) {
+                    val validData = audioBuffer.copyOf(readSize) // Keep only valid samples
+                    withContext(Dispatchers.Main) {
+                        onRawDataCaptured(validData)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("AudioDebug", "Error during recording: ${e.message}")
+        } finally {
+            stopRecording()
+        }
     }
 
     fun stopRecording() {
         isRecording = false
-        audioRecord?.stop()
-        audioRecord?.release()
+        audioRecord?.apply {
+            stop()
+            release()
+        }
         audioRecord = null
+        Log.d("AudioDebug", "Recording stopped")
     }
 }
